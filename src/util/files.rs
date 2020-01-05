@@ -1,7 +1,5 @@
 use std::path::Path;
 
-use fs_extra::dir::{copy as copy_dir, CopyOptions};
-
 use crate::util::CleanPath;
 
 /// Copies file from source to destination.
