@@ -5,27 +5,51 @@ use hashbrown::HashMap;
 
 use crate::{
     git::Repository,
-    util::CleanPath,
+    util::{self, CleanPath, Update},
     ws::{Package, Workspace},
 };
 
 pub struct Updater<'a> {
-    pub manifests: WorkspaceManifests,
+    pub workspace: WorkspaceManifests,
     pub toml_files: HashMap<String, PackageManifests<'a>>,
 }
 
 impl<'a> Updater<'a> {
-    pub fn new(repo: &mut Repository) -> Self {
-        Updater {
-            manifests: WorkspaceManifests::new(repo),
+    pub fn new(repo: &mut Repository) -> Result<Self, failure::Error> {
+        Ok(Updater {
+            workspace: WorkspaceManifests::new(repo)?,
             toml_files: HashMap::default(),
-        }
+        })
     }
 
-    pub fn set_paths(&mut self, repo: &mut Repository, workspace: &'a Workspace<'a>) {
-        for pkg in workspace.packages().iter() {
-            self.set_pkg_paths(pkg, repo, &workspace);
+    pub fn update(
+        &mut self,
+        repo: &mut Repository,
+        package: &'a Package,
+        update: &Update,
+    ) -> Result<(), failure::Error> {
+        if let Some(bump) = update.as_bump() {
+            // Get change package manigests
+            let manifest = self.manifests(package, repo)?;
+            // Bump version accordingly
+            manifest.bump_ver(bump);
+            // Save `Cargo.preview-head.toml` and `Cargo.preview-index.toml`.
+            manifest.save_preview()?;
+            // Bump replace in cargo workspace manifest.
+            self.workspace.bump_replace_ver(package, bump);
         }
+        Ok(())
+    }
+
+    pub fn set_paths(
+        &mut self,
+        repo: &mut Repository,
+        workspace: &'a Workspace<'a>,
+    ) -> Result<(), failure::Error> {
+        for pkg in workspace.packages().iter() {
+            self.set_pkg_paths(pkg, repo, &workspace)?;
+        }
+        Ok(())
     }
 
     pub fn set_pkg_paths(
@@ -33,8 +57,8 @@ impl<'a> Updater<'a> {
         pkg: &'a Package,
         repo: &mut Repository,
         workspace: &Workspace,
-    ) {
-        let manifests = self.manifests(pkg, repo);
+    ) -> Result<(), failure::Error> {
+        let manifests = self.manifests(pkg, repo)?;
         let pkg_path = repo.rel_path(pkg.manifest_path().parent().unwrap());
         let changed = pkg
             .dependencies()
@@ -52,20 +76,22 @@ impl<'a> Updater<'a> {
             });
         if changed {
             manifests.save_preview().unwrap();
+            util::rename(manifests.index_preview_path(), &manifests.manifest_path)?;
         }
+        Ok(())
     }
 
     pub fn manifests(
         &mut self,
         pkg: &'a Package,
         repo: &mut Repository,
-    ) -> &mut PackageManifests<'a> {
+    ) -> Result<&mut PackageManifests<'a>, failure::Error> {
         let name = pkg.name().as_str();
         if !self.toml_files.contains_key(name) {
-            let toml_file = PackageManifests::new(repo, pkg);
+            let toml_file = PackageManifests::new(repo, pkg)?;
             self.toml_files.insert(name.to_owned(), toml_file);
         }
-        self.toml_files.get_mut(name).unwrap()
+        Ok(self.toml_files.get_mut(name).unwrap())
     }
 }
 

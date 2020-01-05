@@ -5,8 +5,6 @@ use std::path::Path;
 use failure::Error;
 use git2::{Index, Oid, Repository, Signature};
 
-use super::WTF_RLSR_TAG;
-
 /// Commit builder structure.
 pub struct CommitBuilder {
     signature: Signature<'static>,
@@ -31,6 +29,7 @@ impl CommitBuilder {
         self.index.add_path(path.as_ref())?;
         Ok(())
     }
+
     /// Commits changes and sets detached HEAD.
     pub fn commit(&mut self, message: &str, repo: &mut Repository) -> Result<Oid, Error> {
         self.index.write()?;
@@ -49,8 +48,7 @@ impl CommitBuilder {
             &tree,
             &[&commit],
         )?;
-        repo.set_head_detached(new_commit)?;
-        repo.reference(WTF_RLSR_TAG, new_commit, true, "")?;
+        repo.head()?.set_target(new_commit, "")?;
         Ok(new_commit)
     }
 }

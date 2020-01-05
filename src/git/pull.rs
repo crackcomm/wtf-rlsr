@@ -2,15 +2,15 @@ use git2::Repository;
 
 pub fn do_fetch<'a>(
     repo: &'a git2::Repository,
-    refs: &[&str],
-    remote: &'a mut git2::Remote,
+    remote_branch: &str,
+    remote: &mut git2::Remote,
 ) -> Result<git2::AnnotatedCommit<'a>, git2::Error> {
     let mut fo = git2::FetchOptions::new();
     // Always fetch all tags.
     // Perform a download and also update tips
-    fo.download_tags(git2::AutotagOption::All);
-    trace!("Fetching {} for repo", remote.name().unwrap());
-    remote.fetch(refs, Some(&mut fo), None)?;
+    fo.download_tags(git2::AutotagOption::Auto);
+    trace!("Fetching {} from {}", remote_branch, remote.name().unwrap());
+    remote.fetch(&[&remote_branch], Some(&mut fo), None)?;
 
     // If there are local objects (we got a thin pack), then tell the user
     // how many objects we saved from having to cross the network.
@@ -34,6 +34,7 @@ pub fn do_fetch<'a>(
     }
 
     let fetch_head = repo.find_reference("FETCH_HEAD")?;
+    trace!("Fetched head: {:?}", fetch_head.target());
     Ok(repo.reference_to_annotated_commit(&fetch_head)?)
 }
 
@@ -97,10 +98,10 @@ fn normal_merge(
     Ok(())
 }
 
-pub fn do_merge<'a>(
-    repo: &'a Repository,
+pub fn do_merge(
+    repo: &Repository,
     remote_branch: &str,
-    fetch_commit: git2::AnnotatedCommit<'a>,
+    fetch_commit: git2::AnnotatedCommit<'_>,
 ) -> Result<(), git2::Error> {
     // 1. do a merge analysis
     let analysis = repo.merge_analysis(&[&fetch_commit])?;

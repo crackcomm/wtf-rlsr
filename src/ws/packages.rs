@@ -1,6 +1,7 @@
 //! Cargo workspace packages wrappers.
 
 use std::ops::Deref;
+use std::path::{Path, PathBuf};
 
 use cargo::core::Dependency as CargoDependency;
 use cargo::core::Package as CargoPackage;
@@ -13,35 +14,32 @@ pub struct Packages<'a> {
 }
 
 impl<'a> Packages<'a> {
-    pub fn new<I>(iter: I, repo: &mut Repository) -> Self
+    pub fn new<I>(iter: I, repo: &mut Repository) -> Result<Self, git2::Error>
     where
         I: Iterator<Item = &'a CargoPackage>,
     {
         let members: Vec<_> = iter.collect();
         for member in &members {
             // pre-load git diff cache
-            repo.diff(member);
+            repo.diff(member)?;
         }
         let inner = members
             .clone()
             .into_iter()
             .map(|pkg| Package::new(pkg, repo, &members))
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
 
-        Packages { inner }
+        Ok(Packages { inner })
+    }
+
+    /// Counts changed packages.
+    pub fn changed(&self) -> usize {
+        self.inner.iter().filter(|pkg| pkg.is_changed()).count()
     }
 
     /// Finds package by name.
     pub fn find_by_name(&self, name: &str) -> Option<&Package<'a>> {
         self.inner.iter().find(|pkg| pkg.name().as_str() == name)
-    }
-}
-
-impl<'a, I: Iterator<Item = &'a CargoPackage>> From<I> for Packages<'a> {
-    fn from(pkgs: I) -> Self {
-        Packages {
-            inner: pkgs.map(|pkg| pkg.into()).collect(),
-        }
     }
 }
 
@@ -55,9 +53,10 @@ impl<'a> Deref for Packages<'a> {
 
 /// Cargo package wrapper.
 pub struct Package<'a> {
-    inner: &'a CargoPackage,
     pub diff: Option<Diff>,
     pub dependencies: Vec<Dependency>,
+    inner: &'a CargoPackage,
+    manifest_path: PathBuf,
 }
 
 impl<'a> Package<'a> {
@@ -66,8 +65,8 @@ impl<'a> Package<'a> {
         pkg: &'a CargoPackage,
         repo: &mut Repository,
         members: &Vec<&'a CargoPackage>,
-    ) -> Self {
-        let diff = Some(repo.diff(pkg).clone());
+    ) -> Result<Self, git2::Error> {
+        let diff = Some(repo.diff(pkg)?.clone());
         let dependencies = pkg
             .dependencies()
             .into_iter()
@@ -82,11 +81,13 @@ impl<'a> Package<'a> {
                 }
             })
             .collect();
-        Package {
+        let manifest_path = repo.rel_path(pkg.manifest_path());
+        Ok(Package {
             inner: pkg,
             diff,
             dependencies,
-        }
+            manifest_path,
+        })
     }
 
     /// Returns true if package diff is not empty.
@@ -106,6 +107,11 @@ impl<'a> Package<'a> {
     pub fn dependencies(&self) -> &Vec<Dependency> {
         &self.dependencies
     }
+
+    /// Returns package manifest path.
+    pub fn manifest_path(&self) -> &Path {
+        self.manifest_path.as_ref()
+    }
 }
 
 impl<'a> Deref for Package<'a> {
@@ -113,20 +119,6 @@ impl<'a> Deref for Package<'a> {
 
     fn deref(&self) -> &Self::Target {
         &self.inner
-    }
-}
-
-impl<'a> From<&'a CargoPackage> for Package<'a> {
-    fn from(pkg: &'a CargoPackage) -> Self {
-        Package {
-            dependencies: pkg
-                .dependencies()
-                .into_iter()
-                .map(|dep| dep.clone().into())
-                .collect(),
-            inner: pkg,
-            diff: None,
-        }
     }
 }
 

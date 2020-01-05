@@ -1,6 +1,6 @@
-pub mod bump;
 pub mod commit;
 pub mod packages;
+pub mod update;
 
 use console::Style;
 use dialoguer::{theme::ColorfulTheme, Confirmation, Select};

@@ -40,17 +40,33 @@ pub fn glob_source(pkg: &Package) -> Vec<PathBuf> {
 
 /// Clean UNIX-like path trait.
 pub trait CleanPath {
-    fn clean_path(&self) -> PathBuf;
+    /// Fixes a windows path into a string.
+    fn fix_path_str(&self) -> String;
+
+    /// Cleans path into a string.
+    fn clean_path_str(&self) -> String;
+
+    /// Fixes a windows path.
+    fn fix_path(&self) -> PathBuf {
+        self.fix_path_str().into()
+    }
+
+    /// Cleans path for display.
+    fn clean_path(&self) -> PathBuf {
+        self.clean_path_str().into()
+    }
 }
 
 impl CleanPath for Path {
-    fn clean_path(&self) -> PathBuf {
+    fn fix_path_str(&self) -> String {
         self.to_path_buf()
             .into_os_string()
             .into_string()
             .unwrap()
             .replace("\\\\?\\", "")
-            .replace(std::path::MAIN_SEPARATOR, "/")
-            .into()
+    }
+
+    fn clean_path_str(&self) -> String {
+        self.fix_path_str().replace(std::path::MAIN_SEPARATOR, "/")
     }
 }

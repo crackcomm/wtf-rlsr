@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use hashbrown::HashMap;
 
 use cargo::core::Package;
-use git2::{DiffOptions, Repository as GitRepository};
+use git2::{DiffOptions, Error, Repository as GitRepository};
 
 use crate::util::{source_git_diff_paths, CleanPath};
 
@@ -20,32 +20,39 @@ pub struct Repository {
 
 impl Repository {
     /// Creates new Git repository structure.
-    pub fn new() -> Self {
-        let inner = GitRepository::open_from_env().unwrap();
+    pub fn new() -> Result<Self, Error> {
+        let inner = GitRepository::open_from_env()?;
         let cache = HashMap::default();
-        Repository { inner, cache }
+        Ok(Repository { inner, cache })
     }
 
     /// Attempt to open an already-existing repository at `path`.
-    pub fn open<P: AsRef<Path>>(path: P) -> Self {
-        let inner = GitRepository::open(path).unwrap();
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
+        let inner = GitRepository::open(path)?;
         let cache = HashMap::default();
-        Repository { inner, cache }
+        Ok(Repository { inner, cache })
     }
 
     /// Returns HEAD commit.
-    pub fn head_commit(&self) -> git2::Commit<'_> {
-        let head_oid = self.head().unwrap().target().unwrap();
-        self.find_commit(head_oid).unwrap()
+    pub fn head_commit(&self) -> Result<git2::Commit<'_>, Error> {
+        let head_oid = self.head()?.target().unwrap();
+        self.find_commit(head_oid)
     }
 
     /// Returns HEAD tree.
-    pub fn head_tree(&self) -> git2::Tree<'_> {
-        self.head_commit().tree().unwrap()
+    pub fn head_tree(&self) -> Result<git2::Tree<'_>, Error> {
+        self.head_commit()?.tree()
+    }
+
+    /// Returns HEAD revision id.
+    pub fn head_rev_id(&self) -> Result<String, Error> {
+        let mut rev_id = self.head()?.target().unwrap().to_string();
+        rev_id.truncate(8);
+        Ok(rev_id)
     }
 
     /// Creates a diff for a package.
-    pub fn diff(&mut self, pkg: &Package) -> &Diff {
+    pub fn diff(&mut self, pkg: &Package) -> Result<&Diff, Error> {
         let pkg_name = pkg.name().to_string();
         if !self.cache.contains_key(&pkg_name) {
             let mut diff_opts = DiffOptions::new();
@@ -55,12 +62,11 @@ impl Repository {
                 diff_opts.pathspec(self.rel_path(&path));
             }
             let diff = self
-                .diff_index_to_workdir(None, Some(&mut diff_opts))
-                .unwrap()
+                .diff_index_to_workdir(None, Some(&mut diff_opts))?
                 .into();
             self.cache.insert(pkg_name.to_owned(), diff);
         }
-        self.cache.get(&pkg_name).unwrap()
+        Ok(self.cache.get(&pkg_name).unwrap())
     }
 
     /// Gets cached diff for a package.
@@ -77,12 +83,12 @@ impl Repository {
     }
 
     /// Gets contents of a file on HEAD.
-    pub fn get_contents(&self, tree: &git2::Tree, path: &Path) -> Vec<u8> {
+    pub fn get_contents(&self, tree: &git2::Tree, path: &Path) -> Result<Vec<u8>, Error> {
         let path = self.rel_path(path);
-        let entry = tree.get_path(&path).unwrap();
-        let entry_object = entry.to_object(&self).unwrap();
+        let entry = tree.get_path(&path)?;
+        let entry_object = entry.to_object(&self)?;
         let entry_blob = entry_object.into_blob().unwrap();
-        entry_blob.content().to_owned()
+        Ok(entry_blob.content().to_owned())
     }
 }
 

@@ -40,7 +40,7 @@ pub fn select_changed<'a, 'i>(
 /// Prompts to select dependencies to update.
 pub fn select_update_deps<'a>(
     dependants: &Vec<&'a Package<'a>>,
-    bump: &Bump,
+    bump: Bump,
 ) -> (Vec<&'a Package<'a>>, Vec<&'a Package<'a>>) {
     let (checkboxes, defaults_update) = dependant_choices(&dependants, bump);
     let selections = Checkboxes::with_theme(&default_theme())
@@ -70,11 +70,10 @@ pub fn select_update_deps<'a>(
 
 fn dependant_choices<'a>(
     dependants: &Vec<&'a Package<'a>>,
-    bump: &Bump,
+    bump: Bump,
 ) -> (Vec<String>, Vec<bool>) {
     let (mut checkboxes, mut defaults_update) = (Vec::new(), Vec::new());
     let default_update = match bump {
-        Bump::Chore => panic!("Chore should not update dependants."),
         Bump::Patch | Bump::Minor => true,
         Bump::Major => false,
     };

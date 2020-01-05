@@ -1,6 +1,8 @@
 mod bump;
+pub mod commit;
 pub mod diff2html;
 mod files;
+pub mod init;
 mod logger;
 mod paths;
 mod publisher;

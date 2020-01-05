@@ -21,20 +21,20 @@ pub struct PackageManifests<'a> {
 impl<'a> PackageManifests<'a> {
     /// Creates new package manifests structure,
     /// containing manifest on HEAD and index.
-    pub fn new(repo: &mut Repository, pkg: &'a Package) -> Self {
-        let head = PackageManifest::new_head(repo, pkg);
-        let index = PackageManifest::new_index(pkg);
+    pub fn new(repo: &mut Repository, pkg: &'a Package) -> Result<Self, failure::Error> {
+        let head = PackageManifest::new_head(repo, pkg)?;
+        let index = PackageManifest::new_index(pkg)?;
         let manifest_path = repo.rel_path(pkg.manifest_path());
-        PackageManifests {
+        Ok(PackageManifests {
             pkg,
             head,
             index,
             manifest_path,
-        }
+        })
     }
 
     /// Bumps package version in manifest.
-    pub fn bump_ver(&mut self, bump: &Bump) {
+    pub fn bump_ver(&mut self, bump: Bump) {
         trace!(
             "Bumping package {} version {} to {}",
             self.pkg.name(),
@@ -118,17 +118,17 @@ pub struct PackageManifest<'a> {
 }
 
 impl<'a> PackageManifest<'a> {
-    pub fn new_head(repo: &mut Repository, pkg: &'a Package) -> Self {
-        let content = repo.get_contents(&repo.head_tree(), pkg.manifest_path());
-        let content = String::from_utf8(content).unwrap();
+    pub fn new_head(repo: &mut Repository, pkg: &'a Package) -> Result<Self, failure::Error> {
+        let content = repo.get_contents(&repo.head_tree()?, pkg.manifest_path())?;
+        let content = String::from_utf8(content)?;
         let lines: Vec<String> = content.lines().map(|line| line.to_owned()).collect();
-        PackageManifest { pkg, lines }
+        Ok(PackageManifest { pkg, lines })
     }
 
-    pub fn new_index(pkg: &'a Package) -> Self {
-        let content = std::fs::read_to_string(pkg.manifest_path()).unwrap();
+    pub fn new_index(pkg: &'a Package) -> std::io::Result<Self> {
+        let content = std::fs::read_to_string(pkg.manifest_path())?;
         let lines: Vec<String> = content.lines().map(|line| line.to_owned()).collect();
-        PackageManifest { pkg, lines }
+        Ok(PackageManifest { pkg, lines })
     }
 }
 

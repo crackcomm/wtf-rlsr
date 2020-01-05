@@ -3,12 +3,15 @@ mod packages;
 pub use self::deps::*;
 pub use self::packages::*;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use cargo::core::{shell::Shell, Workspace as CargoWorkspace};
 use cargo::util::{config::Config as CargoConfig, errors::CargoResult};
 
-use crate::git::Repository;
+use crate::{
+    git::Repository,
+    util::{Bump, BumpExt},
+};
 
 /// Creates default workspace configuration.
 pub fn cargo_config(dir: PathBuf) -> CargoConfig {
@@ -27,18 +30,39 @@ pub struct Workspace<'a> {
     pub graphs: deps::WorkspaceGraphs,
     pub packages: Packages<'a>,
     pub directory: PathBuf,
+    // serialized package info
+    root_package: SerializedPackage,
+    manifest_path: PathBuf,
 }
 
 impl<'a> Workspace<'a> {
     /// Creates a new workspace with cargo and git setup.
-    pub fn new(cargo: &'a CargoWorkspace<'a>, repo: &mut Repository) -> Self {
+    pub fn new(
+        cargo: &'a CargoWorkspace<'a>,
+        repo: &mut Repository,
+    ) -> Result<Self, failure::Error> {
         let graphs = deps::workspace_graph(&cargo);
-        let packages = Packages::new(cargo.members(), repo);
-        Workspace {
+        let packages = Packages::new(cargo.members(), repo)?;
+        let directory = cargo.config().cwd().to_path_buf();
+        let root_package = SerializedPackage::open(&directory.join("package.json"))?;
+        let manifest_path = repo.rel_path(&directory.join("Cargo.toml"));
+        Ok(Workspace {
             graphs,
             packages,
-            directory: cargo.config().cwd().to_path_buf(),
-        }
+            directory,
+            root_package,
+            manifest_path,
+        })
+    }
+
+    /// Returns workspace package version.
+    pub fn version(&self) -> &semver::Version {
+        &self.root_package.version
+    }
+
+    /// Returns workspace package name.
+    pub fn name(&self) -> &str {
+        &self.root_package.name
     }
 
     /// Returns workspace packages.
@@ -49,5 +73,42 @@ impl<'a> Workspace<'a> {
     /// Finds a package by name.
     pub fn find_package(&self, name: &str) -> Option<&Package> {
         self.packages.find_by_name(name)
+    }
+
+    /// Bumps workspace package version in file ONLY.
+    pub fn bump(&self, bump: Bump) -> Result<(), failure::Error> {
+        self.root_package
+            .bump_and_save(bump, &self.directory.join("package.json"))
+    }
+
+    /// Returns clean path to workspace manifest.
+    pub fn manifest_path(&self) -> &Path {
+        self.manifest_path.as_ref()
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct SerializedPackage {
+    name: String,
+    version: semver::Version,
+}
+
+impl SerializedPackage {
+    fn open<P: AsRef<Path>>(path: P) -> Result<Self, failure::Error> {
+        let content = std::fs::read_to_string(path)?;
+        let package = serde_json::from_str(&content)?;
+        Ok(package)
+    }
+
+    fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), failure::Error> {
+        let content = serde_json::to_string_pretty(&self)?;
+        std::fs::write(path, content)?;
+        Ok(())
+    }
+
+    fn bump_and_save<P: AsRef<Path>>(&self, bump: Bump, path: P) -> Result<(), failure::Error> {
+        let mut manifest = self.clone();
+        manifest.version = manifest.version.bump(bump);
+        manifest.save(path)
     }
 }

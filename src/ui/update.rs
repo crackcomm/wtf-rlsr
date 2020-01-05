@@ -5,45 +5,44 @@ use colored::*;
 
 use crate::{
     ui,
-    util::{Bump, BUMPS},
+    util::{Bump, Update, UPDATES},
 };
 
-/// Prompts for a package bump kind.
-pub fn prompt(pkg: &Package) -> std::io::Result<Option<&Bump>> {
+/// Prompts for a package update kind.
+pub fn prompt(pkg: &Package) -> std::io::Result<Option<&Update>> {
     let ver = pkg.version();
-    let bump_list = bump_choices(ver);
     let selection = ui::select_from_list(
         &format!("Select update kind for {}", pkg.name()),
-        &bump_list,
+        &update_choices(ver),
     )?;
     println!();
-    Ok(selection.and_then(|selection| BUMPS.get(selection)))
+    Ok(selection.and_then(|selection| UPDATES.get(selection)))
 }
 
-fn bump_choices(ver: &semver::Version) -> Vec<String> {
+fn update_choices(ver: &semver::Version) -> Vec<String> {
     vec![
+        format!("docs v{}", ver),
         format!("chore v{}", ver),
         format!(
             "patch v{} -> v{}",
-            format_bump(ver, &Bump::Patch, true),
-            format_bump(ver, &Bump::Patch, false)
+            format_bump(ver, Bump::Patch, true),
+            format_bump(ver, Bump::Patch, false)
         ),
         format!(
             "minor v{} -> v{}",
-            format_bump(ver, &Bump::Minor, true),
-            format_bump(ver, &Bump::Minor, false)
+            format_bump(ver, Bump::Minor, true),
+            format_bump(ver, Bump::Minor, false)
         ),
         format!(
             "major v{} -> v{}",
-            format_bump(ver, &Bump::Major, true),
-            format_bump(ver, &Bump::Major, false)
+            format_bump(ver, Bump::Major, true),
+            format_bump(ver, Bump::Major, false)
         ),
     ]
 }
 
-pub fn format_bump(ver: &semver::Version, bump: &Bump, pre_bump: bool) -> String {
+pub fn format_bump(ver: &semver::Version, bump: Bump, pre_bump: bool) -> String {
     match bump {
-        Bump::Chore => format!("{}", ver),
         Bump::Patch => format!(
             "{}.{}.{}",
             ver.major,

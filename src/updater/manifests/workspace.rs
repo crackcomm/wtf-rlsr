@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use cargo::core::Package;
 
 use crate::git::Repository;
-use crate::util::Bump;
+use crate::util::{Bump, CleanPath};
 
 use super::{ManifestExt, WorkspaceManifestExt};
 
@@ -17,28 +17,43 @@ pub struct WorkspaceManifests {
 impl WorkspaceManifests {
     /// Creates new package manifests structure,
     /// containing manifest on HEAD and index.
-    pub fn new(repo: &mut Repository) -> Self {
+    pub fn new(repo: &mut Repository) -> Result<Self, failure::Error> {
         let path = repo.workdir().unwrap().join("Cargo.toml");
-        let head = WorkspaceManifest::new_head(repo);
-        let index = WorkspaceManifest::new_index(&path);
-        WorkspaceManifests {
+        let head = WorkspaceManifest::new_head(repo)?;
+        let index = WorkspaceManifest::new_index(&path)?;
+        Ok(WorkspaceManifests {
             head,
             index,
             manifest_path: path,
-        }
+        })
+    }
+
+    /// Creates a head preview path.
+    pub fn head_preview_path(&self) -> PathBuf {
+        self.manifest_path
+            .parent()
+            .unwrap()
+            .join("Cargo.preview-head.toml")
+            .clean_path()
+    }
+
+    /// Creates a index preview path.
+    pub fn index_preview_path(&self) -> PathBuf {
+        self.manifest_path
+            .parent()
+            .unwrap()
+            .join("Cargo.preview-index.toml")
+            .clean_path()
     }
 
     /// Saves TOML manifest to a preview destination.
     pub fn save_preview(&self) -> std::io::Result<()> {
-        let source_path = self.manifest_path.parent().unwrap();
-        self.head
-            .save(&source_path.join("Cargo.preview-head.toml"))?;
-        self.index
-            .save(&source_path.join("Cargo.preview-index.toml"))
+        self.head.save(&self.head_preview_path())?;
+        self.index.save(&self.index_preview_path())
     }
 
     /// Bumps package version in manifest.
-    pub fn bump_ver(&mut self, package: &Package, bump: &Bump) {
+    pub fn bump_replace_ver(&mut self, package: &Package, bump: Bump) {
         self.head.bump_ver(package, bump);
         self.index.bump_ver(package, bump);
     }
@@ -50,17 +65,17 @@ pub struct WorkspaceManifest {
 }
 
 impl WorkspaceManifest {
-    pub fn new_head(repo: &mut Repository) -> Self {
-        let content = repo.get_contents(&repo.head_tree(), Path::new("Cargo.toml"));
+    pub fn new_head(repo: &mut Repository) -> Result<Self, git2::Error> {
+        let content = repo.get_contents(&repo.head_tree()?, Path::new("Cargo.toml"))?;
         let content = String::from_utf8(content).unwrap();
         let lines: Vec<String> = content.lines().map(|line| line.to_owned()).collect();
-        WorkspaceManifest { lines }
+        Ok(WorkspaceManifest { lines })
     }
 
-    pub fn new_index<P: AsRef<Path>>(path: P) -> Self {
-        let content = std::fs::read_to_string(path).unwrap();
+    pub fn new_index<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
+        let content = std::fs::read_to_string(path)?;
         let lines: Vec<String> = content.lines().map(|line| line.to_owned()).collect();
-        WorkspaceManifest { lines }
+        Ok(WorkspaceManifest { lines })
     }
 }
 

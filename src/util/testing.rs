@@ -2,26 +2,30 @@ use std::cell::RefCell;
 
 use cargo::{
     core::Workspace as CargoWorkspace,
-    ops::{run_tests, CompileFilter, CompileOptions, Packages, TestOptions},
+    ops::{self, CompileFilter, CompileOptions, Packages, TestOptions},
     util::Config as CargoConfig,
 };
 
 use crate::{util::Logger, ws::Package};
 
-/// Tests a package.
-pub fn test_pkg(
+/// Runs test for all packages in the workspace.
+pub fn run_tests(
     package: &Package<'_>,
     workspace: &CargoWorkspace<'_>,
 ) -> Result<bool, failure::Error> {
     workspace.status("Testing", "Starting");
     let test_opts = test_opts(workspace.config());
     let mut success = true;
-    match run_tests(&workspace, &test_opts, &[]) {
+    match ops::run_tests(&workspace, &test_opts, &[]) {
         Ok(_) => {
             workspace.status("Testing", "Finished");
         }
-        Err(_) => {
-            println!("Package {} test returned with error.", package.name());
+        Err(err) => {
+            println!(
+                "Package {} test returned with error: {}.",
+                package.name(),
+                err
+            );
             success = false;
         }
     };

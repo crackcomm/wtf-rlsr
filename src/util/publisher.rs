@@ -52,7 +52,7 @@ pub fn publish_pkg(pkg: &CargoPackage, config: &CargoConfig, dry_run: bool) -> R
         println!(
             "Package {} publish returned with error: {:?}.",
             pkg.name(),
-            err
+            err.to_string().lines().next().unwrap()
         );
         Ok(false)
     } else {
@@ -76,7 +76,7 @@ pub fn publish_pkg_deep(
     for (name, _) in workspace.graphs.dependants.edges(&name) {
         let package = workspace.find_package(&name).unwrap();
         let name = package.name().to_string();
-        if !published.contains(&name) {
+        if !published.contains(&name) && package.publish().is_none() {
             published.push(name.clone());
             trace!("Publish Dependency: {:?}", name);
             if !publish_pkg_deep(

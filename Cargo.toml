@@ -1,6 +1,6 @@
 [package]
 name = "wtf-rlsr"
-version = "0.0.1"
+version = "1.0.0"
 authors = ["Łukasz Kurowski <crackcomm@gmail.com>"]
 edition = "2018"
 
@@ -32,3 +32,6 @@ fs_extra = "^1.1.0"
 which = "3.1.0"
 pathdiff = "0.1.0"
 syn = { version = "^1.0.12", features = ["full", "visit"] }
+serde = "^1.0.0"
+serde_derive = "^1.0.0"
+serde_json = "^1.0.0"

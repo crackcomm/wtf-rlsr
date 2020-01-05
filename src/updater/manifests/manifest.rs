@@ -23,7 +23,7 @@ pub trait WorkspaceManifestExt: ManifestExt {
     }
 
     /// Bumps package version in manifest.
-    fn bump_ver(&mut self, package: &Package, bump: &Bump) {
+    fn bump_ver(&mut self, package: &Package, bump: Bump) {
         change_replace(self.lines_mut(), package, bump);
     }
 }
@@ -34,7 +34,7 @@ pub trait PackageManifestExt: ManifestExt {
     fn version(&self) -> &Version;
 
     /// Bumps package version in manifest.
-    fn bump_ver(&mut self, bump: &Bump) {
+    fn bump_ver(&mut self, bump: Bump) {
         let ver = self.version().clone();
         let new = ver.bump(bump);
         change_first_ver(self.lines_mut(), &ver, &new);
@@ -82,7 +82,7 @@ pub trait ManifestExt {
 }
 
 /// Changes package version in `replace` section.
-fn change_replace(lines: &mut Vec<String>, package: &Package, bump: &Bump) {
+fn change_replace(lines: &mut Vec<String>, package: &Package, bump: Bump) {
     let old = format!(":{}\"", package.version());
     let new = format!(":{}\"", package.version().bump(bump));
     let find_name = format!("\"{}:{}\"", package.name(), package.version());
