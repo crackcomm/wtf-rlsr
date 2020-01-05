@@ -45,18 +45,6 @@ impl<'a> PackageManifests<'a> {
         self.index.bump_ver(bump);
     }
 
-    /// Sets package version in manifest.
-    pub fn update_ver(&mut self, new_ver: &semver::Version) {
-        trace!(
-            "Updating package {} version {} to {}",
-            self.pkg.name(),
-            self.pkg.version(),
-            new_ver,
-        );
-        self.head.update_ver(new_ver);
-        self.index.update_ver(new_ver);
-    }
-
     /// Updates dependency version in manifest.
     pub fn update_dep(&mut self, name: &str, old_ver: &semver::Version, new_ver: &semver::Version) {
         trace!(
@@ -92,15 +80,6 @@ impl<'a> PackageManifests<'a> {
             .parent()
             .unwrap()
             .join("Cargo.preview-index.toml")
-            .clean_path()
-    }
-
-    /// Creates a index preview path.
-    pub fn backup_path(&self) -> PathBuf {
-        self.manifest_path
-            .parent()
-            .unwrap()
-            .join("Cargo.backup.toml")
             .clean_path()
     }
 

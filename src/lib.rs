@@ -61,7 +61,7 @@ pub struct Opt {
     dry_run: bool,
 }
 
-pub fn execute() -> Result<(), failure::Error> {
+pub fn execute_release() -> Result<(), failure::Error> {
     let opt = util::init::setup_opt()?;
     let mut repo = git::init_main_repo(&opt.directory)?;
     let head_branch = git::get_head_branch(&repo)?;
@@ -170,7 +170,7 @@ pub fn execute() -> Result<(), failure::Error> {
 
     // Add workspace and package manifests to git commit
     if !opt.dry_run {
-        util::commit::add_preview_head(&mut commit, package.manifest_path())?;
+        util::commit::add_preview_index(&mut commit, package.manifest_path())?;
         util::commit::add_preview_head(&mut commit, workspace.manifest_path())?;
         util::commit::move_index_manifest(package.manifest_path())?;
         util::commit::move_index_manifest(workspace.manifest_path())?;
@@ -286,7 +286,6 @@ pub fn execute() -> Result<(), failure::Error> {
         let rls_tag = format!("refs/tags/v{}", update.bump(workspace.version()));
         let branch_tag = format!("refs/heads/{}", head_branch);
         git::set_head_ref(&rls_tag, &mut repo)?;
-        // git::set_head_ref(&branch_tag, &mut repo)?;
         git::push_remote(&repo, "origin", &[&branch_tag, &rls_tag])?;
     }
 

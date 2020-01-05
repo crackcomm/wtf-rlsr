@@ -20,7 +20,7 @@ pub fn confirm(text: &str) -> std::io::Result<bool> {
         .interact()
 }
 
-pub(crate) fn default_theme() -> ColorfulTheme {
+pub fn default_theme() -> ColorfulTheme {
     ColorfulTheme {
         values_style: Style::new().yellow().dim(),
         indicator_style: Style::new().yellow().bold(),

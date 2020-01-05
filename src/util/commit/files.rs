@@ -3,15 +3,7 @@ use std::path::{Path, PathBuf};
 use crate::{
     git::CommitBuilder,
     util::{self, CleanPath},
-    ws::Package,
 };
-
-pub fn restore_pkgs_manifests(pkgs: &Vec<&Package>) -> Result<(), failure::Error> {
-    for pkg in pkgs {
-        util::commit::restore_manifest(pkg.manifest_path())?;
-    }
-    Ok(())
-}
 
 pub fn restore_manifest<P: AsRef<Path>>(manifest_path: P) -> Result<(), failure::Error> {
     let source_dir = manifest_path.as_ref().parent().unwrap();

@@ -43,10 +43,3 @@ pub fn prompt_header(prompt: &'static str) -> std::io::Result<String> {
         })
         .interact()
 }
-
-/// Logs a commit message.
-pub fn log_message(commit: &Vec<String>) {
-    for line in commit {
-        trace!("Commit message: {}", line);
-    }
-}

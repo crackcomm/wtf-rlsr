@@ -19,13 +19,6 @@ pub struct Repository {
 }
 
 impl Repository {
-    /// Creates new Git repository structure.
-    pub fn new() -> Result<Self, Error> {
-        let inner = GitRepository::open_from_env()?;
-        let cache = HashMap::default();
-        Ok(Repository { inner, cache })
-    }
-
     /// Attempt to open an already-existing repository at `path`.
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
         let inner = GitRepository::open(path)?;
