@@ -82,14 +82,19 @@ pub enum Bump {
 
 impl Bump {
     /// Returns dependency bump.
-    pub fn dependency(&self, changed: bool) -> Self {
+    pub fn dependency(&self, changed: bool, commit: bool) -> Self {
         if !changed {
-            Bump::Patch
-        } else {
+            match self {
+                Bump::Major => Bump::Minor,
+                Bump::Minor | Bump::Patch => Bump::Patch,
+            }
+        } else if !commit {
             match self {
                 Bump::Major | Bump::Minor => Bump::Minor,
                 Bump::Patch => *self,
             }
+        } else {
+            *self
         }
     }
 }

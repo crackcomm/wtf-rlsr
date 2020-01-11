@@ -163,7 +163,8 @@ pub fn execute(cmd: &Command, mut runtime: ExecRuntime) -> Result<(), failure::E
     // Bump package dependants versions
     if let Some(bump) = update.as_bump() {
         for pkg_dep in update_packages.iter() {
-            let pkg_dep_bump = bump.dependency(pkg_dep.is_changed());
+            let is_commit = commit_packages.contains(pkg_dep);
+            let pkg_dep_bump = bump.dependency(pkg_dep.is_changed(), is_commit);
             // Bump replace in cargo workspace manifest.
             updater.workspace.bump_replace_ver(pkg_dep, pkg_dep_bump);
 
@@ -174,9 +175,10 @@ pub fn execute(cmd: &Command, mut runtime: ExecRuntime) -> Result<(), failure::E
 
             update_packages.iter().for_each(|deep_dep| {
                 let name = deep_dep.name().as_str();
+                let is_commit = commit_packages.contains(pkg_dep);
                 let new_deep_dep_ver = deep_dep
                     .version()
-                    .bump(bump.dependency(deep_dep.is_changed()));
+                    .bump(bump.dependency(deep_dep.is_changed(), is_commit));
                 manifest.update_dep(name, deep_dep.version(), &new_deep_dep_ver);
             });
             // Save package manifest in `Cargo.preview-head.toml`.
