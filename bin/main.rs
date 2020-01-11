@@ -1,3 +1,5 @@
 fn main() {
-    wtf_rlsr::execute_release().unwrap();
+    if let Err(e) = wtf_rlsr::execute() {
+        println!("error: {:?}", e);
+    }
 }

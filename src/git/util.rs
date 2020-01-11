@@ -1,14 +1,36 @@
-use git2::Repository;
+use git2::{
+    build::CheckoutBuilder, AnnotatedCommit, AutotagOption, Error, FetchOptions, Reference, Remote,
+    Repository,
+};
 
-pub fn do_fetch<'a>(
-    repo: &'a git2::Repository,
+use super::default_push_options;
+
+/// Attempts to do `git push` to a remote.
+pub fn push_remote(repo: &Repository, remote: &str, refspecs: &[&str]) -> Result<(), Error> {
+    let mut remote = repo.find_remote(remote)?;
+    let mut push_opts = default_push_options();
+    remote.push(refspecs, Some(&mut push_opts))
+}
+
+/// Attempts to do `git pull` from a remote.
+pub fn pull_remote(
+    repo: &Repository,
     remote_branch: &str,
-    remote: &mut git2::Remote,
-) -> Result<git2::AnnotatedCommit<'a>, git2::Error> {
-    let mut fo = git2::FetchOptions::new();
+    remote: &mut Remote,
+) -> Result<(), Error> {
+    let fetch_commit = fetch_remote(&repo, remote_branch, remote)?;
+    merge_commit(&repo, remote_branch, fetch_commit)
+}
+
+fn fetch_remote<'a>(
+    repo: &'a Repository,
+    remote_branch: &str,
+    remote: &mut Remote,
+) -> Result<AnnotatedCommit<'a>, Error> {
+    let mut fo = FetchOptions::new();
     // Always fetch all tags.
     // Perform a download and also update tips
-    fo.download_tags(git2::AutotagOption::Auto);
+    fo.download_tags(AutotagOption::Auto);
     trace!("Fetching {} from {}", remote_branch, remote.name().unwrap());
     remote.fetch(&[&remote_branch], Some(&mut fo), None)?;
 
@@ -38,11 +60,7 @@ pub fn do_fetch<'a>(
     Ok(repo.reference_to_annotated_commit(&fetch_head)?)
 }
 
-fn fast_forward(
-    repo: &Repository,
-    lb: &mut git2::Reference,
-    rc: &git2::AnnotatedCommit,
-) -> Result<(), git2::Error> {
+fn fast_forward(repo: &Repository, lb: &mut Reference, rc: &AnnotatedCommit) -> Result<(), Error> {
     let name = match lb.name() {
         Some(s) => s.to_string(),
         None => String::from_utf8_lossy(lb.name_bytes()).to_string(),
@@ -52,7 +70,7 @@ fn fast_forward(
     lb.set_target(rc.id(), &msg)?;
     repo.set_head(&name)?;
     repo.checkout_head(Some(
-        git2::build::CheckoutBuilder::default()
+        CheckoutBuilder::default()
             // For some reason the force is required to make the working directory actually get updated
             // I suspect we should be adding some logic to handle dirty working directory states
             // but this is just an example so maybe not.
@@ -63,9 +81,9 @@ fn fast_forward(
 
 fn normal_merge(
     repo: &Repository,
-    local: &git2::AnnotatedCommit,
-    remote: &git2::AnnotatedCommit,
-) -> Result<(), git2::Error> {
+    local: &AnnotatedCommit,
+    remote: &AnnotatedCommit,
+) -> Result<(), Error> {
     let local_tree = repo.find_commit(local.id())?.tree()?;
     let remote_tree = repo.find_commit(remote.id())?.tree()?;
     let ancestor = repo
@@ -98,11 +116,11 @@ fn normal_merge(
     Ok(())
 }
 
-pub fn do_merge(
+fn merge_commit(
     repo: &Repository,
     remote_branch: &str,
-    fetch_commit: git2::AnnotatedCommit<'_>,
-) -> Result<(), git2::Error> {
+    fetch_commit: AnnotatedCommit<'_>,
+) -> Result<(), Error> {
     // 1. do a merge analysis
     let analysis = repo.merge_analysis(&[&fetch_commit])?;
 
@@ -127,7 +145,7 @@ pub fn do_merge(
                 )?;
                 repo.set_head(&refname)?;
                 repo.checkout_head(Some(
-                    git2::build::CheckoutBuilder::default()
+                    CheckoutBuilder::default()
                         .allow_conflicts(true)
                         .conflict_style_merge(true)
                         .force(),

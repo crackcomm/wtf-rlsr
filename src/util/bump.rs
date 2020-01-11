@@ -92,30 +92,6 @@ impl Bump {
             }
         }
     }
-
-    /// Returns true if bump is a `Patch`.
-    pub fn is_patch(&self) -> bool {
-        match self {
-            Bump::Patch => true,
-            _ => false,
-        }
-    }
-
-    /// Returns true if bump is a `Minor`.
-    pub fn is_minor(&self) -> bool {
-        match self {
-            Bump::Minor => true,
-            _ => false,
-        }
-    }
-
-    /// Returns true if bump is a `Major`.
-    pub fn is_major(&self) -> bool {
-        match self {
-            Bump::Major => true,
-            _ => false,
-        }
-    }
 }
 
 /// Version bump extension.

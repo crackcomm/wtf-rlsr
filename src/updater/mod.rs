@@ -45,37 +45,82 @@ impl<'a> Updater<'a> {
         &mut self,
         repo: &mut Repository,
         workspace: &'a Workspace<'a>,
+        dry_run: bool,
+        force_versions: bool,
     ) -> Result<(), failure::Error> {
         for pkg in workspace.packages().iter() {
-            self.set_pkg_paths(pkg, repo, &workspace)?;
+            self.set_pkg_paths_impl(pkg, repo, workspace, dry_run, force_versions, false)?;
         }
         Ok(())
     }
 
-    pub fn set_pkg_paths(
+    pub fn set_submodule_paths(
+        &mut self,
+        repo: &mut Repository,
+        workspace: &'a Workspace<'a>,
+        source: &Workspace,
+        dry_run: bool,
+        force_versions: bool,
+    ) -> Result<(), failure::Error> {
+        for pkg in workspace.packages().iter() {
+            self.set_pkg_paths_impl(pkg, repo, source, dry_run, force_versions, true)?;
+        }
+        Ok(())
+    }
+
+    fn set_pkg_paths_impl(
         &mut self,
         pkg: &'a Package,
         repo: &mut Repository,
-        workspace: &Workspace,
+        source: &Workspace,
+        dry_run: bool,
+        force_versions: bool,
+        is_submodule: bool,
     ) -> Result<(), failure::Error> {
-        let manifests = self.manifests(pkg, repo)?;
-        let pkg_path = repo.rel_path(pkg.manifest_path().parent().unwrap());
-        let changed = pkg
+        let pkg_path = repo.rel_path(pkg.directory());
+        let packages: Vec<_> = pkg
             .dependencies()
             .iter()
-            .filter(|dep| dep.is_member())
-            .fold(false, |_, dep| {
-                let name = dep.package_name().as_str();
-                let dep_pkg = workspace.find_package(name).unwrap();
-                let dep_path = repo.rel_path(dep_pkg.manifest_path().parent().unwrap());
-                let rel_path = pathdiff::diff_paths(&dep_path, &pkg_path)
-                    .unwrap()
-                    .clean_path();
+            .filter_map(|dep| {
+                source
+                    .find_package(dep.package_name().as_str())
+                    .map(|dep_pkg| (dep, dep_pkg))
+            })
+            .collect();
+        if packages.len() == 0 {
+            trace!("No members in package {}.", pkg.name());
+            return Ok(());
+        }
+
+        for (dep, dep_pkg) in packages {
+            let manifests = self.manifests(pkg, repo)?;
+            let name = dep_pkg.name().as_str();
+            trace!(
+                "Dependency {} manifest_path: {:?}",
+                name,
+                dep_pkg.directory()
+            );
+            let dep_path = repo.rel_path(dep_pkg.directory());
+            trace!("Dependency {} path: {:?}", name, dep_path);
+            let rel_path = pathdiff::diff_paths(&dep_path, &pkg_path)
+                .unwrap()
+                .clean_path();
+            if force_versions {
+                manifests.set_dep_force(
+                    dep,
+                    dep_pkg,
+                    if is_submodule { None } else { Some(&rel_path) },
+                );
+                self.workspace.set_replace(dep_pkg, &dep_path);
+            } else {
                 manifests.set_dep_path(name, &rel_path, dep_pkg.version());
-                true
-            });
-        if changed {
-            manifests.save_preview().unwrap();
+            }
+        }
+
+        trace!("Saving package {} paths.", pkg.name());
+        let manifests = self.manifests(pkg, repo)?;
+        manifests.save_preview().unwrap();
+        if !dry_run {
             util::rename(manifests.index_preview_path(), &manifests.manifest_path)?;
         }
         Ok(())

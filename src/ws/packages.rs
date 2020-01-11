@@ -19,14 +19,14 @@ impl<'a> Packages<'a> {
         I: Iterator<Item = &'a CargoPackage>,
     {
         let members: Vec<_> = iter.collect();
+        // pre-load git diff cache
         for member in &members {
-            // pre-load git diff cache
             repo.diff(member)?;
         }
         let inner = members
             .clone()
             .into_iter()
-            .map(|pkg| Package::new(pkg, repo, &members))
+            .map(|pkg| Package::new(pkg, repo))
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Packages { inner })
@@ -52,41 +52,39 @@ impl<'a> Deref for Packages<'a> {
 }
 
 /// Cargo package wrapper.
+#[derive(Debug, PartialEq, Eq)]
 pub struct Package<'a> {
     pub diff: Option<Diff>,
     pub dependencies: Vec<Dependency>,
     inner: &'a CargoPackage,
+    directory: PathBuf,
     manifest_path: PathBuf,
 }
 
 impl<'a> Package<'a> {
     /// Updates package info with repository.
-    pub fn new(
-        pkg: &'a CargoPackage,
-        repo: &mut Repository,
-        members: &Vec<&'a CargoPackage>,
-    ) -> Result<Self, git2::Error> {
-        let diff = Some(repo.diff(pkg)?.clone());
+    pub fn new(pkg: &'a CargoPackage, repo: &mut Repository) -> Result<Self, git2::Error> {
         let dependencies = pkg
             .dependencies()
             .into_iter()
             .map(|inner| {
                 let name = inner.package_name().as_str();
-                let is_member = members.iter().any(|pkg| pkg.name().as_str() == name);
-                let diff = repo.cached_diff(name).map(|diff| diff.clone());
+                let is_changed = repo
+                    .cached_diff(name)
+                    .map(|diff| !diff.is_empty())
+                    .unwrap_or(false);
                 Dependency {
-                    diff,
                     inner: inner.clone(),
-                    is_member,
+                    is_changed,
                 }
             })
             .collect();
-        let manifest_path = repo.rel_path(pkg.manifest_path());
         Ok(Package {
+            diff: Some(repo.diff(pkg)?.clone()),
+            manifest_path: repo.rel_path(pkg.manifest_path()),
             inner: pkg,
-            diff,
             dependencies,
-            manifest_path,
+            directory: repo.rel_path(pkg.manifest_path().parent().unwrap()),
         })
     }
 
@@ -98,11 +96,6 @@ impl<'a> Package<'a> {
         }
     }
 
-    /// Returns true if package has changed deps.
-    pub fn has_changed_deps(&self) -> bool {
-        self.dependencies.iter().any(|dep| dep.is_changed())
-    }
-
     /// Returns package dependencies.
     pub fn dependencies(&self) -> &Vec<Dependency> {
         &self.dependencies
@@ -111,6 +104,11 @@ impl<'a> Package<'a> {
     /// Returns package manifest path.
     pub fn manifest_path(&self) -> &Path {
         self.manifest_path.as_ref()
+    }
+
+    /// Returns package directory.
+    pub fn directory(&self) -> &Path {
+        self.directory.as_ref()
     }
 }
 
@@ -123,32 +121,18 @@ impl<'a> Deref for Package<'a> {
 }
 
 /// Cargo package dependency wrapper.
+#[derive(Debug, PartialEq, Eq)]
 pub struct Dependency {
     /// Inner cargo package dependency.
     inner: CargoDependency,
-    /// Workspace member package.
-    is_member: bool,
-    /// Dependency diff./
-    diff: Option<Diff>,
+    /// True if dependency is changed.
+    is_changed: bool,
 }
 
 impl Dependency {
-    /// Returns dependency diff.
-    pub fn diff(&self) -> Option<&Diff> {
-        self.diff.as_ref()
-    }
-
     /// Returns true if dependency diff is not empty.
     pub fn is_changed(&self) -> bool {
-        match &self.diff {
-            Some(diff) => !diff.is_empty(),
-            None => false,
-        }
-    }
-
-    /// Returns true if dependency is a member of workspace.
-    pub fn is_member(&self) -> bool {
-        self.is_member
+        self.is_changed
     }
 }
 
@@ -157,15 +141,5 @@ impl Deref for Dependency {
 
     fn deref(&self) -> &Self::Target {
         &self.inner
-    }
-}
-
-impl From<CargoDependency> for Dependency {
-    fn from(inner: CargoDependency) -> Self {
-        Dependency {
-            inner,
-            is_member: false,
-            diff: None,
-        }
     }
 }

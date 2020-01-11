@@ -1,15 +1,6 @@
 //! Workspace dependencies.
 
 use cargo::{core::Workspace as CargoWorkspace, util::graph::Graph};
-use hashbrown::HashMap;
-
-use crate::git::Diff;
-
-/// Map of changed files by package name.
-pub type ChangedDependencies = HashMap<String, Vec<String>>;
-
-/// Map of changed files by package name.
-pub type ChangedPackagesFiles<'a> = HashMap<String, Diff>;
 
 /// Dependencies graph.
 pub type DepGraph = Graph<String, Vec<String>>;

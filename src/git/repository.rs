@@ -10,7 +10,7 @@ use git2::{DiffOptions, Error, Repository as GitRepository};
 
 use crate::util::{source_git_diff_paths, CleanPath};
 
-use super::Diff;
+use super::{default_fetch_options, Diff};
 
 /// Workspace Git repository structure.
 pub struct Repository {
@@ -26,6 +26,15 @@ impl Repository {
         Ok(Repository { inner, cache })
     }
 
+    /// Attempt to clone repository recursively to `dest`.
+    pub fn clone_recurse<P: AsRef<Path>>(source: &str, dest: P) -> Result<Self, Error> {
+        let inner = GitRepository::clone(source, dest)?;
+        let cache = HashMap::default();
+        let repo = Repository { inner, cache };
+        repo.update_submodules(true, false)?;
+        Ok(repo)
+    }
+
     /// Returns HEAD commit.
     pub fn head_commit(&self) -> Result<git2::Commit<'_>, Error> {
         let head_oid = self.head()?.target().unwrap();
@@ -37,13 +46,6 @@ impl Repository {
         self.head_commit()?.tree()
     }
 
-    /// Returns HEAD revision id.
-    pub fn head_rev_id(&self) -> Result<String, Error> {
-        let mut rev_id = self.head()?.target().unwrap().to_string();
-        rev_id.truncate(8);
-        Ok(rev_id)
-    }
-
     /// Creates a diff for a package.
     pub fn diff(&mut self, pkg: &Package) -> Result<&Diff, Error> {
         let pkg_name = pkg.name().to_string();
@@ -52,7 +54,8 @@ impl Repository {
             diff_opts.include_untracked(true);
             diff_opts.recurse_untracked_dirs(true);
             for path in source_git_diff_paths(pkg) {
-                diff_opts.pathspec(self.rel_path(&path));
+                trace!("Diff path: {}", self.rel_path(&path).clean_path().display());
+                diff_opts.pathspec(self.rel_path(&path).clean_path());
             }
             let diff = self
                 .diff_index_to_workdir(None, Some(&mut diff_opts))?
@@ -70,18 +73,45 @@ impl Repository {
     /// Creates path relative to git repo root.
     pub fn rel_path(&self, path: &Path) -> PathBuf {
         match path.strip_prefix(self.workdir().unwrap()) {
-            Ok(res) => res.clean_path(),
-            Err(_) => path.clean_path(),
+            Ok(res) => res.fix_path(),
+            Err(_) => path.fix_path(),
         }
     }
 
     /// Gets contents of a file on HEAD.
     pub fn get_contents(&self, tree: &git2::Tree, path: &Path) -> Result<Vec<u8>, Error> {
-        let path = self.rel_path(path);
+        let path = self.rel_path(path).clean_path();
         let entry = tree.get_path(&path)?;
         let entry_object = entry.to_object(&self)?;
         let entry_blob = entry_object.into_blob().unwrap();
         Ok(entry_blob.content().to_owned())
+    }
+
+    /// Update submodules recursively.
+    pub fn update_submodules(&self, init: bool, deep: bool) -> Result<(), Error> {
+        fn add_subrepos(
+            repo: &git2::Repository,
+            list: &mut Vec<git2::Repository>,
+            init: bool,
+        ) -> Result<(), Error> {
+            for mut subm in repo.submodules()? {
+                let mut opts = git2::SubmoduleUpdateOptions::new();
+                trace!("Fetching submodule {:?}", subm.url().unwrap());
+                opts.fetch(default_fetch_options());
+                subm.update(init, Some(&mut opts))?;
+                list.push(subm.open()?);
+            }
+            Ok(())
+        }
+
+        let mut repos = Vec::new();
+        add_subrepos(self, &mut repos, init)?;
+        if deep {
+            while let Some(repo) = repos.pop() {
+                add_subrepos(&repo, &mut repos, init)?;
+            }
+        }
+        Ok(())
     }
 }
 

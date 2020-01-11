@@ -3,9 +3,7 @@ use std::io::prelude::*;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
-use cargo::core::Package;
-
-use crate::util::glob_source;
+use crate::{util::glob_source, ws::Package};
 
 /// Diff2Html command options.
 pub struct Options {
@@ -22,11 +20,18 @@ impl Default for Options {
 }
 
 /// Spawns `git diff` and `diff2html` for specified package root.
-pub fn spawn_for_pkg(pkg: &Package, opts: &Options) -> Result<(), failure::Error> {
-    let mut files = glob_source(pkg);
+pub fn spawn_for_pkgs(pkgs: &[&Package], opts: &Options) -> Result<(), failure::Error> {
+    let files: Vec<_> = pkgs
+        .iter()
+        .map(|pkg| {
+            let mut source = glob_source(pkg);
+            source.push(pkg.manifest_path().to_path_buf());
+            source
+        })
+        .flatten()
+        .collect();
     if files.len() > 0 {
-        trace!("Diff for package {:?}: {:?}", pkg, files);
-        files.push(pkg.manifest_path().to_path_buf());
+        trace!("Diff for files: {:?}", files);
         spawn_for_paths(files.iter(), opts)
     } else {
         Ok(())
@@ -38,8 +43,9 @@ pub fn spawn_for_paths<I: Iterator<Item = S>, S: AsRef<OsStr>>(
     paths: I,
     opts: &Options,
 ) -> Result<(), failure::Error> {
+    Command::new("git").args(&["add", "-A"]).output()?;
     let mut command = Command::new("git");
-    command.arg("diff");
+    command.args(&["diff", "HEAD"]);
     for path in paths {
         command.arg(path);
     }
@@ -48,6 +54,7 @@ pub fn spawn_for_paths<I: Iterator<Item = S>, S: AsRef<OsStr>>(
         panic!("Error running git diff.");
     }
     let diff = String::from_utf8(output.stdout)?;
+    Command::new("git").args(&["reset"]).output()?;
     let mut child = Command::new(&opts.path)
         .arg("-i")
         .arg("stdin")

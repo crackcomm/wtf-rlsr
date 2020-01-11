@@ -1,9 +1,8 @@
 use std::path::{Path, PathBuf};
 
-use cargo::core::Package;
-
 use crate::git::Repository;
 use crate::util::{Bump, CleanPath};
+use crate::ws::Package;
 
 use super::{ManifestExt, WorkspaceManifestExt};
 
@@ -54,8 +53,14 @@ impl WorkspaceManifests {
 
     /// Bumps package version in manifest.
     pub fn bump_replace_ver(&mut self, package: &Package, bump: Bump) {
-        self.head.bump_ver(package, bump);
-        self.index.bump_ver(package, bump);
+        self.head.bump_replace_ver(package, bump);
+        self.index.bump_replace_ver(package, bump);
+    }
+
+    /// Bumps package version in manifest.
+    pub fn set_replace(&mut self, package: &Package, path: &Path) {
+        self.head.set_replace(package, path);
+        self.index.set_replace(package, path);
     }
 }
 

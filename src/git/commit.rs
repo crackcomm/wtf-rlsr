@@ -5,6 +5,8 @@ use std::path::Path;
 use failure::Error;
 use git2::{Index, Oid, Repository, Signature};
 
+use crate::util::CleanPath;
+
 /// Commit builder structure.
 pub struct CommitBuilder {
     signature: Signature<'static>,
@@ -25,8 +27,9 @@ impl CommitBuilder {
 
     /// Adds file path to git commit.
     pub fn add_path<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Error> {
-        trace!("Git add: {:?}", path.as_ref());
-        self.index.add_path(path.as_ref())?;
+        let path = path.as_ref().clean_path();
+        trace!("Git add: {:?}", path);
+        self.index.add_path(&path)?;
         Ok(())
     }
 

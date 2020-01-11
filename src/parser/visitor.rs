@@ -3,36 +3,49 @@
 use syn::visit::{self, Visit};
 use syn::{Ident, ItemExternCrate, Macro, PathSegment, UsePath};
 
-use crate::ws::Workspace;
+use crate::ws::{Package, Workspace};
 
 /// Package source code visitor.
-pub(crate) struct PackageVisitor<'a, 'cfg> {
-    workspace: &'a Workspace<'cfg>,
-    pub packages: Vec<String>,
+pub struct PackageVisitor<'a> {
+    workspace: &'a Workspace<'a>,
+    pub macros: Vec<String>,
+    pub packages: Vec<&'a Package<'a>>,
 }
 
-impl<'a, 'cfg> PackageVisitor<'a, 'cfg> {
-    pub fn new(workspace: &'a Workspace<'cfg>) -> Self {
+impl<'a> PackageVisitor<'a> {
+    pub fn new(workspace: &'a Workspace<'a>) -> Self {
         PackageVisitor {
             workspace,
+            macros: Vec::new(),
             packages: Vec::new(),
         }
     }
 
-    pub fn dedup_packages(&mut self) {
-        self.packages.sort();
-        self.packages.dedup();
+    pub fn dedup(&mut self) {
+        self.macros.sort();
+        self.macros.dedup();
+        self.packages
+            .sort_by(|a, b| a.name().as_str().cmp(b.name().as_str()));
+        self.packages
+            .dedup_by(|a, b| a.name().as_str() == b.name().as_str());
     }
 
     fn register_pkg(&mut self, ident: &Ident) {
         let name = ident.to_string().replace("_", "-");
         if let Some(pkg) = self.workspace.find_package(&name) {
-            self.packages.push(pkg.name().to_string());
+            self.packages.push(pkg);
         }
+    }
+
+    fn register_macro(&mut self, ident: &Ident) {
+        // let name = ident.to_string().replace("_", "-");
+        // if let Some(pkg) = self.workspace.find_package(&name) {
+        //     self.packages.push(pkg);
+        // }
     }
 }
 
-impl<'a, 'cfg, 'ast> Visit<'ast> for PackageVisitor<'a, 'cfg> {
+impl<'a, 'ast> Visit<'ast> for PackageVisitor<'a> {
     fn visit_item_extern_crate(&mut self, node: &'ast ItemExternCrate) {
         self.register_pkg(&node.ident);
         visit::visit_item_extern_crate(self, node);
@@ -49,10 +62,14 @@ impl<'a, 'cfg, 'ast> Visit<'ast> for PackageVisitor<'a, 'cfg> {
     }
 
     fn visit_macro(&mut self, node: &'ast Macro) {
-        trace!(
-            "Macro: {:?}",
-            node.path.segments.first().unwrap().ident.to_string()
-        );
+        // if node.path.segments.first().unwrap().ident == "macro_rules" {
+        //     trace!(
+        //         "Macro: {:?}",
+        //         // node.path.segments.first().unwrap().ident.to_string()
+        //         node
+        //     );
+        // }
+        self.register_macro(&node.path.segments.first().unwrap().ident);
         visit::visit_macro(self, node);
     }
 }

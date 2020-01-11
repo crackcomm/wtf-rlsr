@@ -1,18 +1,18 @@
 use std::path::{Path, PathBuf};
 
-use cargo::core::Package;
 use semver::Version;
 
 use crate::{
     git::Repository,
     util::{Bump, BumpExt, CleanPath},
+    ws::{Dependency, Package},
 };
 
 use super::{ManifestExt, PackageManifestExt};
 
 /// Package manifests on HEAD and index.
 pub struct PackageManifests<'a> {
-    pub pkg: &'a Package,
+    pub pkg: &'a Package<'a>,
     pub head: PackageManifest<'a>,
     pub index: PackageManifest<'a>,
     pub manifest_path: PathBuf,
@@ -22,8 +22,14 @@ impl<'a> PackageManifests<'a> {
     /// Creates new package manifests structure,
     /// containing manifest on HEAD and index.
     pub fn new(repo: &mut Repository, pkg: &'a Package) -> Result<Self, failure::Error> {
-        let head = PackageManifest::new_head(repo, pkg)?;
         let index = PackageManifest::new_index(pkg)?;
+        let head = match PackageManifest::new_head(repo, pkg) {
+            Ok(head) => head,
+            Err(_) => {
+                trace!("Package {} manifest not found in HEAD.", pkg.name());
+                index.clone()
+            }
+        };
         let manifest_path = repo.rel_path(pkg.manifest_path());
         Ok(PackageManifests {
             pkg,
@@ -65,6 +71,18 @@ impl<'a> PackageManifests<'a> {
         self
     }
 
+    /// Updates dependency version in manifest.
+    pub fn set_dep_force(
+        &mut self,
+        dep: &Dependency,
+        pkg: &Package,
+        path: Option<&Path>,
+    ) -> &mut Self {
+        self.head.set_dep_force(dep, pkg, path);
+        self.index.set_dep_force(dep, pkg, path);
+        self
+    }
+
     /// Creates a head preview path.
     pub fn head_preview_path(&self) -> PathBuf {
         self.manifest_path
@@ -91,13 +109,14 @@ impl<'a> PackageManifests<'a> {
 }
 
 /// Package manifest.
+#[derive(Clone)]
 pub struct PackageManifest<'a> {
-    pub pkg: &'a Package,
+    pub pkg: &'a Package<'a>,
     pub lines: Vec<String>,
 }
 
 impl<'a> PackageManifest<'a> {
-    pub fn new_head(repo: &mut Repository, pkg: &'a Package) -> Result<Self, failure::Error> {
+    pub fn new_head(repo: &mut Repository, pkg: &'a Package<'a>) -> Result<Self, failure::Error> {
         let content = repo.get_contents(&repo.head_tree()?, pkg.manifest_path())?;
         let content = String::from_utf8(content)?;
         let lines: Vec<String> = content.lines().map(|line| line.to_owned()).collect();

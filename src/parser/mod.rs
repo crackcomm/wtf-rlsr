@@ -3,16 +3,27 @@ mod visitor;
 use std::fs::File;
 use std::io::Read;
 
-use cargo::core::Package;
 use failure::Error;
 use syn::visit::Visit;
 
 use self::visitor::PackageVisitor;
 
-use crate::{util::glob_source, ws::Workspace};
+use crate::{
+    util::glob_source,
+    ws::{Package, Workspace},
+};
+
+/// Members collection.
+#[derive(Debug)]
+pub struct Members {
+    /// Macros members.
+    pub macros: Vec<String>,
+    /// Packages members.
+    pub packages: Vec<String>,
+}
 
 /// Extracts used workspace dependencies in package root.
-pub fn collect_workspace_deps(workspace: &Workspace, pkg: &Package) -> Result<Vec<String>, Error> {
+pub fn collect_members<'a>(workspace: &'a Workspace<'a>, pkg: &Package) -> Result<Members, Error> {
     let files = glob_source(pkg);
     let mut visitor = PackageVisitor::new(workspace);
     for filename in files {
@@ -25,6 +36,14 @@ pub fn collect_workspace_deps(workspace: &Workspace, pkg: &Package) -> Result<Ve
         // println!("syntax={:?}", syntax);
         visitor.visit_file(&syntax);
     }
-    visitor.dedup_packages();
-    Ok(visitor.packages)
+    visitor.dedup();
+    let packages = visitor
+        .packages
+        .into_iter()
+        .map(|pkg| pkg.name().to_string())
+        .collect();
+    Ok(Members {
+        macros: visitor.macros,
+        packages,
+    })
 }

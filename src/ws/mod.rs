@@ -1,9 +1,11 @@
-mod deps;
+mod graphs;
 mod packages;
-pub use self::deps::*;
+pub use self::graphs::*;
 pub use self::packages::*;
 
 use std::path::{Path, PathBuf};
+
+use failure::ResultExt;
 
 use cargo::core::{shell::Shell, Workspace as CargoWorkspace};
 use cargo::util::{config::Config as CargoConfig, errors::CargoResult};
@@ -27,7 +29,7 @@ pub fn cargo_workspace<'a>(config: &'a CargoConfig) -> CargoResult<CargoWorkspac
 
 /// Cargo workspace wrapper.
 pub struct Workspace<'a> {
-    pub graphs: deps::WorkspaceGraphs,
+    pub graphs: WorkspaceGraphs,
     pub packages: Packages<'a>,
     pub directory: PathBuf,
     // serialized package info
@@ -41,11 +43,16 @@ impl<'a> Workspace<'a> {
         cargo: &'a CargoWorkspace<'a>,
         repo: &mut Repository,
     ) -> Result<Self, failure::Error> {
-        let graphs = deps::workspace_graph(&cargo);
+        let graphs = workspace_graph(&cargo);
         let packages = Packages::new(cargo.members(), repo)?;
         let directory = cargo.config().cwd().to_path_buf();
         let root_package = SerializedPackage::open(&directory.join("package.json"))?;
         let manifest_path = repo.rel_path(&directory.join("Cargo.toml"));
+        trace!(
+            "Workspace {} version: {}",
+            root_package.name,
+            root_package.version
+        );
         Ok(Workspace {
             graphs,
             packages,
@@ -95,7 +102,8 @@ struct SerializedPackage {
 
 impl SerializedPackage {
     fn open<P: AsRef<Path>>(path: P) -> Result<Self, failure::Error> {
-        let content = std::fs::read_to_string(path)?;
+        let content = std::fs::read_to_string(path)
+            .with_context(|e| format!("error reading package.json: {}", e))?;
         let package = serde_json::from_str(&content)?;
         Ok(package)
     }

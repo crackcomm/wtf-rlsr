@@ -3,7 +3,7 @@ use dialoguer::Checkboxes;
 
 use crate::{
     ui::select_from_list,
-    util::Bump,
+    util::{Bump, Update},
     ws::{Package, Workspace},
 };
 
@@ -38,43 +38,51 @@ pub fn select_changed<'a, 'i>(
 }
 
 /// Prompts to select dependencies to update.
-pub fn select_update_deps<'a>(
+pub fn select_packages<'a>(
+    prompt: &str,
     dependants: &Vec<&'a Package<'a>>,
-    bump: Bump,
+    update: &Update,
+    default: bool,
 ) -> (Vec<&'a Package<'a>>, Vec<&'a Package<'a>>) {
-    let (checkboxes, defaults_update) = dependant_choices(&dependants, bump);
-    let selections = Checkboxes::with_theme(&default_theme())
-        .with_prompt("Select dependencies to update in tree")
-        .items(&checkboxes)
-        .defaults(&defaults_update)
-        .interact()
-        .unwrap();
-    let update_packages: Vec<_> = selections
-        .clone()
-        .into_iter()
-        .map(|index| *dependants.get(index).unwrap())
-        .collect();
-    let packages_to_git: Vec<_> = dependants
-        .iter()
-        .enumerate()
-        .filter_map(|(index, dep)| {
-            if selections.contains(&index) {
-                None
-            } else {
-                Some(*dep)
-            }
-        })
-        .collect();
-    (update_packages, packages_to_git)
+    if dependants.len() > 0 || update.as_bump().is_none() {
+        let bump = update.as_bump().unwrap();
+        let (checkboxes, defaults_update) = dependant_choices(&dependants, bump, default);
+        let selections = Checkboxes::with_theme(&default_theme())
+            .with_prompt(prompt)
+            .items(&checkboxes)
+            .defaults(&defaults_update)
+            .interact()
+            .unwrap();
+        let update_packages: Vec<_> = selections
+            .clone()
+            .into_iter()
+            .map(|index| *dependants.get(index).unwrap())
+            .collect();
+        let packages_to_git: Vec<_> = dependants
+            .iter()
+            .enumerate()
+            .filter_map(|(index, dep)| {
+                if selections.contains(&index) {
+                    None
+                } else {
+                    Some(*dep)
+                }
+            })
+            .collect();
+        (update_packages, packages_to_git)
+    } else {
+        (vec![], vec![])
+    }
 }
 
 fn dependant_choices<'a>(
     dependants: &Vec<&'a Package<'a>>,
     bump: Bump,
+    default: bool,
 ) -> (Vec<String>, Vec<bool>) {
     let (mut checkboxes, mut defaults_update) = (Vec::new(), Vec::new());
     let default_update = match bump {
-        Bump::Patch | Bump::Minor => true,
+        Bump::Patch | Bump::Minor => default,
         Bump::Major => false,
     };
     for pkg in dependants {

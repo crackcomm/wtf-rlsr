@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 /// Git diff structure.
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Diff {
     pub files_changed: usize,
     pub insertions: usize,

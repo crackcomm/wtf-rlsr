@@ -1,10 +1,11 @@
 use std::path::{Path, PathBuf};
 
 use crate::{
-    git::CommitBuilder,
+    git::{CommitBuilder, Diff},
     util::{self, CleanPath},
 };
 
+/// Restores backed up cargo manifests.
 pub fn restore_manifest<P: AsRef<Path>>(manifest_path: P) -> Result<(), failure::Error> {
     let source_dir = manifest_path.as_ref().parent().unwrap();
     let backup_toml = source_dir.join("Cargo.backup.toml");
@@ -12,6 +13,7 @@ pub fn restore_manifest<P: AsRef<Path>>(manifest_path: P) -> Result<(), failure:
     Ok(())
 }
 
+/// Moves preview cargo manifest from index as default manifest.
 pub fn move_index_manifest<P: AsRef<Path>>(manifest_path: P) -> Result<(), failure::Error> {
     let source_dir = manifest_path.as_ref().parent().unwrap();
     let backup_toml = source_dir.join("Cargo.backup.toml");
@@ -21,6 +23,7 @@ pub fn move_index_manifest<P: AsRef<Path>>(manifest_path: P) -> Result<(), failu
     Ok(())
 }
 
+/// Adds preview cargo manifest from HEAD to commit.
 pub fn add_preview_head<P: AsRef<Path>>(
     commit: &mut CommitBuilder,
     manifest_path: P,
@@ -28,6 +31,7 @@ pub fn add_preview_head<P: AsRef<Path>>(
     add_preview(commit, manifest_path, "head")
 }
 
+/// Adds preview cargo manifest from index to commit.
 pub fn add_preview_index<P: AsRef<Path>>(
     commit: &mut CommitBuilder,
     manifest_path: P,
@@ -50,6 +54,17 @@ fn add_preview<P: AsRef<Path>>(
     Ok(())
 }
 
+/// Includes diff in commit.
+pub fn add_diff(
+    commit: &mut CommitBuilder,
+    diff: &Diff,
+    dir: &PathBuf,
+) -> Result<(), failure::Error> {
+    add_files(commit, &diff.changed_files, dir)?;
+    remove_files(commit, &diff.deleted_files, dir)
+}
+
+/// Removes files in commit.
 pub fn remove_files(
     commit: &mut CommitBuilder,
     files: &Vec<PathBuf>,
@@ -64,12 +79,16 @@ pub fn remove_files(
     }
     Ok(())
 }
+
+/// Adds files in commit.
 pub fn add_files(
     commit: &mut CommitBuilder,
     files: &Vec<PathBuf>,
     dir: &PathBuf,
 ) -> Result<(), failure::Error> {
     for file in files {
+        // Before copying create dir
+        util::ensure_dir_exists(&file)?;
         // Add changed file to commit
         commit.add_path(&file.clean_path())?;
         // Copy changed file to cached repo

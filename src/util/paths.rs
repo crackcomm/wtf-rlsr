@@ -59,11 +59,16 @@ pub trait CleanPath {
 
 impl CleanPath for Path {
     fn fix_path_str(&self) -> String {
-        self.to_path_buf()
+        let fixed = self
+            .to_path_buf()
             .into_os_string()
             .into_string()
             .unwrap()
-            .replace("\\\\?\\", "")
+            .replace("\\\\?\\", "");
+        match fixed.strip_suffix("\\") {
+            Some(fixed) => fixed.to_owned(),
+            None => fixed,
+        }
     }
 
     fn clean_path_str(&self) -> String {
